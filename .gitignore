@@ -1,0 +1,10 @@
+/.cache
+/.dockerignore
+/.idea
+/.vscode
+/derby.log
+/Dockerfile_bkp
+/metastore_db
+/spark-warehouse
+/test_func.py
+/__pycache__
