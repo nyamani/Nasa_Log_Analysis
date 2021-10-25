@@ -2,10 +2,8 @@
 """
 Spark_Submit:
 export SPARK_MAJOR_VERSION=3
-
 spark-submit --master local[*] --num-executors 1 --executor-cores 2 --executor-memory 1G --driver-memory 1G
 --properties-file /nasa_log_conf.properties /nasa_log_analysis.py
-
 @author: nyamani
 """
 from os import truncate
@@ -29,10 +27,6 @@ except ImportError as e:
     print("Error importing Spark Modules", e)
     sys.exit(1)
 
-dt = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-#log_dir = '/log_dir/'
-#logging.basicConfig(filename="{0}/test_{1}.log".format(log_dir, dt), level=logging.DEBUG)
-# Function to create SparkSession variable if it does not exist.
 def getSparkSessionInstance(appname):
     """ This function Creates SparkSession Instance if it does not exists"""
     if 'sparkSessionSingletonInstance' not in globals():
@@ -43,23 +37,20 @@ def getSparkSessionInstance(appname):
     return globals()['sparkSessionSingletonInstance']
 
 def fileExists(filePath):
-    """This func takes file path as inout and Checks if the file exist and returns boolean"""
+    """This func takes file path as input and Checks if the file exist and returns boolean"""
     return os.path.exists(filePath)
 
 def readInputFile(inputFilePath, Fformat):
-    """ This function takes two args: inputFilePath, FileFormat and returns the Spark DF"""
-    #schema = StructType([])
-    #df = spark.createDataFrame(data=[], schema=schema)
+    """ This function takes two args: inputFilePath, FileFormat and returns a Spark DF"""
     if fileExists(inputFilePath):
         try:
             df = spark.read.format(Fformat).load(inputFilePath)
-            #df.show(10, truncate=False)
         except IOError as e:
             print("Exception while reading the file: ", e)
     return df
 
 def columnExtract(df):
-    """ This function takes a DF and dictionary as inout and returns a log parsed DF """
+    """ This function takes a DF as input and returns a log parsed DF using regex """
     host_regex = r'(^\S+\.[\S+\.]+\S+)\s'
     timestamp_regex = r'\[(\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} -\d{4})]'
     method_uri_protocol_regex = r'\"(\S+)\s(\S+)\s*(\S*)\"'
@@ -96,22 +87,18 @@ def route_parsed_dataframes(df):
     Args:
         df: spark dataframe
     Returns:
-        df,df: A good data Frame and error or bad data Frame"""
-    # Check if there are any nulls generated while parsing.
-    # we can consider more scenarios like type validations based on the use case.
-    # if time permits, we can do more here.
+        df,df: A good data Frame with out nulls in Status field and an error or bad data Frame with nulls in any of the fields"""
     bad_rows_df = df.filter(' OR '.join([c + " is null" for c in df.columns]))
     good_rows_df = df.filter(df['status'].isNotNull())
     return good_rows_df, bad_rows_df
 
 def top_n_visitors_day(df, topnumber):
-    """  This function aggregates host or visitor data and returns the top N frequent visitors for each day
+    """ This function aggregates host or visitor data and returns the top N frequent visitors for each day
     Args:
         df : spark Data Frame
         topnumber: top-N
     Returns:
         df : Aggregated, ranked df with top-N visitors each day"""
-    # Aggregate columns can also be parametrized if there is a pattern of requirements.
     agg_visitor_df = df.groupBy('host', 'date').count()
     w = Window.partitionBy('date').orderBy(desc('count'))
     frequent_visitors = agg_visitor_df.select('host', 'date', 'count', dense_rank().over(w).alias('DR')).where(
@@ -119,13 +106,12 @@ def top_n_visitors_day(df, topnumber):
     return frequent_visitors
 
 def top_n_urls_day(df, topNumber):
-    """  This function aggregates data and returns the top N frequent urls for each day
+    """  This function aggregates url data and returns the top N frequent urls for each day
     Args:
         df : spark Data Frame
         topnumber: top-N
     Returns:
-        df : Aggregated, ranked df with top-N visitors each day"""
-    # Aggregate columns can also be parametrized if there is a pattern of requirements.
+        df : Aggregated, ranked df with top-N urls each day"""
     agg_url_df = df.groupBy('url', 'date').count()
     w = Window.partitionBy('date').orderBy(desc('count'))
     frequent_urls = agg_url_df.select('url', 'date', 'count', dense_rank().over(w).alias('DR')).where(
@@ -139,7 +125,6 @@ def top_n_visitors_urls_day(df, topNumber):
         topnumber: top-N
     Returns:
         df : Aggregated, ranked df with top-N visitors and urls each day"""
-    # Aggregate columns can also be parametrized if there is a pattern of requirements.
     agg_host_url_df = df.groupBy('host', 'url', 'date').count()
     w = Window.partitionBy('date').orderBy(desc('count'))
     frequent_visitor_urls = agg_host_url_df.select('host', 'url', 'date', 'count',
@@ -153,36 +138,25 @@ def save_df(df, path, fileformat, partitionnbr):
         path: output Directory
         fileformat: Output file format like csv,json,parquet,avro and delta
         partitionnbr: Number of files to be created
-    Returns:
-        boolean: True of False
-        """
-    # Writing output files to file system
+    """
     try:
         df.repartition(int(partitionnbr)).write.option('header', True).mode('overwrite').format(fileformat).save(path)
     except IOError as e:
         print("Exception while writing the file: ", e)
 
-
 if __name__ == "__main__":
-    # Reading configurations from a Properties file.
-
     conf = SparkConf()
     #sc = SparkSession.sparkContext
     sc = SparkContext(conf=conf)
-
     appname = "NasaLogAnalysis"
 
-    #As a first step we need to create Spark variable to interact with Spark engine.
-    spark = getSparkSessionInstance(appname)  # Creating spark instance
+    # Create Spark instance to interact with Spark engine.
+    spark = getSparkSessionInstance(appname)
     print("Spark Driver created for this session: ", spark)
-    print("...........................")
-    print("...........................")
 
-
-    #appname = sc.getConf().get("spark.AppName")
+    # Reading configurations from a Properties file.
     inputFilePath = sc.getConf().get("spark.infilePath")
     inputFileFormat = sc.getConf().get("spark.inputFileFormat")
-    #columnNames = sc.getConf().get("spark.columnNames")
     topNumber = int(sc.getConf().get("spark.topNumber"))
     visitorOutPutFile = sc.getConf().get("spark.visitorOutPutFile")
     urlOutPutFile = sc.getConf().get("spark.urlOutPutFile")
@@ -190,33 +164,19 @@ if __name__ == "__main__":
     badRecordsOutPutFile = sc.getConf().get("spark.badRecordsOutPutFile")
     outPutFileFormat = sc.getConf().get("spark.outPutFileFormat")
     partitionnbr = sc.getConf().get("spark.partitionNbr")
-
     print("Here is the input file path to read from : ", inputFilePath)
-    print("Successfully read all the configs............!")
-
-
 
     # Reading .zip/text formatted log file into a Dataframe using Spark Read API.
     nasa_logDF = readInputFile(inputFilePath, inputFileFormat)
 
-    # We should never try show, collect in PROD.
-    # It's not recommended since it may crash the driver
-    # nasa_logDF.show(10, truncate=False)
-
     # Extracting columns from each record/row in the DF.
     extractDF1 = columnExtract(nasa_logDF)
-    # extractDF1.show(10, truncate=False)
 
-    # Caching Data Frame to avoid reading source file multiple times when an action is called.
-    # It significantly improves the performance by avoid multiple I/O.
+    # Optimization: Caching Data Frame to avoid reading source file multiple times when an action is called.
     extractDF, badDF = route_parsed_dataframes(extractDF1)
     extractDF.cache()
 
-    # We should never try show, collect in PROD.
-    # It's not recommended since it may crash the driver
-    extractDF.show(5, truncate=False)
-
-    # Formatting date into desired format
+    # Formatting date into desired datetime format
     udf_parse_time = udf(parse_log_time)
     formattedDF = extractDF.withColumn("timestamp", udf_parse_time(col("timestamp")).cast('timestamp')).withColumn(
         "date", to_date(col("timestamp")))
@@ -227,22 +187,14 @@ if __name__ == "__main__":
     # top-N most frequent urls for each day.
     frequent_urls_day = top_n_urls_day(formattedDF, topNumber)
 
-    # Assumption: Not sure if the question is for a combined analytic so creating a new DF.
-    # This will have frequent visitors and urls for each day.
+    # Assumption: Not sure if the question is for a combined analytic so creating a new DF with frequent visitors and urls for each day.
     frequent_visitors_urls = top_n_visitors_urls_day(formattedDF, topNumber)
 
-    # Saving the DataFrame into File System.
-    visitor_save = save_df(frequent_visitors_day, visitorOutPutFile, outPutFileFormat, partitionnbr)
-    if visitor_save:
-        print(" Successfully written frequent visitors output to file")
-    urls_save = save_df(frequent_urls_day, urlOutPutFile, outPutFileFormat, partitionnbr)
-    if urls_save:
-        print(" Successfully written frequent urls output to file")
-    visitor_urls_save = save_df(frequent_visitors_urls, visitorUrlOutPutFile, outPutFileFormat, partitionnbr)
-    if visitor_urls_save:
-        print(" Successfully written frequent visitors & urls output to file")
-    # Writing bad records to a directory for future reference or for further cleansing.
-    bad_rec_save = save_df(badDF, badRecordsOutPutFile, outPutFileFormat, partitionnbr)
+    # Saving the DataFrames into File System.
+    save_df(frequent_visitors_day, visitorOutPutFile, outPutFileFormat, partitionnbr)
+    save_df(frequent_urls_day, urlOutPutFile, outPutFileFormat, partitionnbr)
+    save_df(frequent_visitors_urls, visitorUrlOutPutFile, outPutFileFormat, partitionnbr)
+    save_df(badDF, badRecordsOutPutFile, outPutFileFormat, partitionnbr)
 
     # Stopping the Driver hook.
     spark.stop()
