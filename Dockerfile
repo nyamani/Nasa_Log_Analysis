@@ -22,6 +22,8 @@ ENV PYTHONPATH="${SPARK_HOME}/python:${SPARK_HOME}/python/lib/py4j-0.10.9-src.zi
 RUN mkdir $SPARK_HOME/conf
 RUN echo "SPARK_LOCAL_IP=127.0.0.1" > $SPARK_HOME/conf/spark-env.sh
 
+EXPOSE 4040
+
 # Install pip requirements
 COPY requirements.txt .
 RUN python -m pip install -r requirements.txt
@@ -30,6 +32,7 @@ RUN mkdir /log_dir
 
 #Copy python script for batch
 COPY . /app/
+
 
 # Downlaod Nasa logfile and copy it into input_dir or landing dir.
 WORKDIR /app/src/input_dir/ 

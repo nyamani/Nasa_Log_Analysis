@@ -153,7 +153,6 @@ if __name__ == "__main__":
     # Create Spark instance to interact with Spark engine.
     spark = getSparkSessionInstance(appname)
     print("Spark Driver created for this session: ", spark)
-
     # Reading configurations from a Properties file.
     inputFilePath = sc.getConf().get("spark.infilePath")
     inputFileFormat = sc.getConf().get("spark.inputFileFormat")
